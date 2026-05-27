@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 def render_metric_cards(df: pd.DataFrame):
     """
@@ -10,8 +10,11 @@ def render_metric_cards(df: pd.DataFrame):
         st.warning("Tidak ada data untuk kalkulasi metrik.")
         return
 
+    # KUNCI SOLUSI: Menggunakan timezone.utc agar Timezone-Aware, 
+    # sejajar dengan data datetime64[ns, UTC] dari pandas.
+    now = datetime.now(timezone.utc)
+    
     # Kalkulasi Gempa Hari Ini (24 jam terakhir)
-    now = datetime.now()
     one_day_ago = now - timedelta(days=1)
     total_hari_ini = len(df[df["datetime"] >= one_day_ago])
 
