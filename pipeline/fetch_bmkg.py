@@ -59,7 +59,8 @@ def fetch_from_endpoint(url: str, source_name: str) -> pd.DataFrame:
         records = []
         for g in data_gempa:
             try:
-                dt_str = f"{g.get('Tanggal', '')} {g.get('Jam', '')}"
+                # Menggunakan format ISO 8601 UTC langsung dari API BMKG
+                dt_str = g.get("DateTime")
                 
                 lat_str, lon_str = g.get("Coordinates", ",").split(",")
                 latitude  = float(lat_str)
