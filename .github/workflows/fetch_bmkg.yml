@@ -1,0 +1,56 @@
+name: Fetch BMKG Earthquake Data
+
+# Kapan workflow ini berjalan:
+#   1. Otomatis setiap jam tepat (cron schedule, dalam waktu UTC)
+#   2. Bisa dijalankan manual dari tab Actions di GitHub (workflow_dispatch)
+#      - Ini sangat berguna untuk testing awal tanpa harus menunggu jam berikutnya
+
+on:
+  schedule:
+    # Sintaks cron: menit jam hari bulan hari_minggu
+    # "0 * * * *" = menit ke-0 setiap jam = setiap jam tepat dalam UTC
+    # Catatan: UTC+7 (WIB) = jam 07.00 WIB berjalan pada jam 00.00 UTC
+    - cron: '0 * * * *'
+  workflow_dispatch:  # Aktifkan tombol "Run workflow" manual di GitHub UI
+
+jobs:
+  fetch-and-store:
+    runs-on: ubuntu-latest  # Server Linux gratis yang disediakan GitHub
+
+    steps:
+      # Langkah 1: Download kode terbaru dari repositori ini ke server GitHub
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Langkah 2: Siapkan Python versi 3.11
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          # Cache dependensi agar instalasi berikutnya lebih cepat
+          cache: 'pip'
+
+      # Langkah 3: Install semua library Python yang dibutuhkan
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Langkah 4: Tulis kredensial Google ke file sementara
+      # Secret GOOGLE_CREDENTIALS disimpan di: Settings > Secrets > Actions
+      # Isinya adalah seluruh konten file credentials.json Anda
+      - name: Write Google credentials from secret
+        run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > credentials.json
+
+      # Langkah 5: Jalankan pipeline utama
+      - name: Run BMKG data pipeline
+        env:
+          # SPREADSHEET_ID juga disimpan sebagai Secret agar tidak hardcoded
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+        run: python main.py
+
+      # Langkah 6: Hapus file kredensial SELALU, bahkan jika langkah sebelumnya gagal
+      # "if: always()" memastikan ini tetap berjalan meski ada error
+      # Ini adalah praktik keamanan penting — file credentials.json tidak boleh
+      # tersisa di server setelah pipeline selesai
+      - name: Remove credentials file
+        if: always()
+        run: rm -f credentials.json
