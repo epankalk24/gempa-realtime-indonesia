@@ -24,15 +24,15 @@ def load_data():
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
         
-        # Membuka sheet filtered_data yang sudah bersih dari anomali luar Indonesia
+        # Membuka sheet filtered_data
         sh = client.open_by_key(spreadsheet_id)
         worksheet = sh.worksheet("filtered_data")
         
         # Konversi data spreadsheet menjadi Pandas DataFrame
         df = pd.DataFrame(worksheet.get_all_records())
         
-       if not df.empty:
-            # Konversi secara defensif, data yang gagal di-parse akan diubah menjadi NaT (Not a Time)
+        if not df.empty:
+            # Konversi secara defensif, data yang gagal di-parse akan diubah menjadi NaT
             df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce")
             
             # Buang baris data yang format waktunya rusak agar peta tidak crash
@@ -40,5 +40,7 @@ def load_data():
             
             # Mengurutkan dari kejadian yang paling terbaru
             df = df.sort_values(by="datetime", ascending=False)
+            
+        return df
 
     return fetch_cached_data()
