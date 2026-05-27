@@ -1,17 +1,16 @@
 name: Fetch BMKG Earthquake Data
 
 # Kapan workflow ini berjalan:
-#   1. Otomatis setiap jam tepat (cron schedule, dalam waktu UTC)
-#   2. Bisa dijalankan manual dari tab Actions di GitHub (workflow_dispatch)
-#      - Ini sangat berguna untuk testing awal tanpa harus menunggu jam berikutnya
+#   1. Otomatis setiap kali ada perubahan kode/file (push)
+#   2. Otomatis setiap jam tepat (cron schedule, waktu UTC)
+#   3. Bisa dijalankan manual dari tab Actions di GitHub (workflow_dispatch)
 
 on:
+  push:
+    branches: [ main, master ]   # Alur kerja langsung berjalan jika Anda menyimpan file ini
   schedule:
-    # Sintaks cron: menit jam hari bulan hari_minggu
-    # "0 * * * *" = menit ke-0 setiap jam = setiap jam tepat dalam UTC
-    # Catatan: UTC+7 (WIB) = jam 07.00 WIB berjalan pada jam 00.00 UTC
-    - cron: '0 * * * *'
-  workflow_dispatch:  # Aktifkan tombol "Run workflow" manual di GitHub UI
+    - cron: '0 * * * *'          # Tetap berjalan otomatis setiap jam
+  workflow_dispatch:             # Menampilkan tombol manual setelah terindeks
 
 jobs:
   fetch-and-store:
