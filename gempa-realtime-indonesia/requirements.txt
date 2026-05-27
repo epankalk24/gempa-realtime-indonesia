@@ -1,0 +1,11 @@
+# Pipeline dependencies
+requests==2.31.0
+pandas==2.1.4
+gspread==6.0.2
+google-auth==2.27.0
+
+# Streamlit app dependencies (akan dipakai di Bulan 1 saat membangun web app)
+streamlit==1.31.1
+folium==0.15.1
+streamlit-folium==0.18.0
+plotly==5.18.0
