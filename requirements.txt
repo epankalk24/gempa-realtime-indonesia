@@ -9,3 +9,4 @@ streamlit==1.31.1
 folium==0.15.1
 streamlit-folium==0.18.0
 plotly==5.18.0
+gspread-dataframe==3.3.1
