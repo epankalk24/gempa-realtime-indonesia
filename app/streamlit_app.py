@@ -51,9 +51,6 @@ try:
             st.caption("💡 *Klik baris pada tabel di bawah ini untuk mengunci dan menggeser peta langsung ke pusat gempa.*")
             
             display_cols = ["datetime", "magnitude", "depth_km", "region", "latitude", "longitude"]
-            df_display = filtered_df[display_cols].copy()
-            df_display["datetime"] = df_display["datetime"].dt.strftime('%Y-%m-%d %H:%M:%S')
-            
             # Eksekusi tabel interaktif versi Streamlit 1.35.0+
             selected_row = st.dataframe(
                 df_display.rename(columns={
@@ -65,6 +62,10 @@ try:
                     "longitude": "Bujur"
                 }),
                 use_container_width=True,
+                height=400,
+                on_select="rerun",
+                selection_mode="single-row"  # <--- PERBAIKAN: Gunakan tanda hubung (-)
+            )
                 height=400,
                 on_select="rerun",
                 selection_mode="single_row"
