@@ -1,1 +1,0 @@
-# gempa-realtime-indonesia
