@@ -46,7 +46,7 @@ try:
         # 7. BAGIAN BAWAH: TABEL INTERAKTIF & GRAFIK (SIDE-BY-SIDE DI BAWAH PETA)
         bottom_left, bottom_right = st.columns([1, 1])
         
-        with bottom_left:
+       with bottom_left:
             st.markdown("### 📋 Tabel Riwayat Aktivitas Seismik")
             st.caption("💡 *Klik baris pada tabel di bawah ini untuk mengunci dan menggeser peta langsung ke pusat gempa.*")
             
@@ -54,7 +54,7 @@ try:
             df_display = filtered_df[display_cols].copy()
             df_display["datetime"] = df_display["datetime"].dt.strftime('%Y-%m-%d %H:%M:%S')
             
-            # Mengaktifkan mode deteksi klik baris pada dataframe
+            # Eksekusi tabel interaktif versi Streamlit 1.35.0+
             selected_row = st.dataframe(
                 df_display.rename(columns={
                     "datetime": "Waktu Kejadian (UTC)",
@@ -70,17 +70,28 @@ try:
                 selection_mode="single_row"
             )
             
-            # Ambil koordinat jika ada baris yang diklik oleh pengguna
-            if selected_row and len(selected_row.get("selection", {}).get("rows", [])) > 0:
-                row_idx = selected_row["selection"]["rows"][0]
-                lat = float(df_display.iloc[row_idx]["latitude"])
-                lon = float(df_display.iloc[row_idx]["longitude"])
+            # KUNCI PERBAIKAN LOGIKA: Ekstraksi indeks baris secara defensif untuk Streamlit v1.35.0
+            try:
+                # Pola pembacaan indeks baris terpilih pada versi awal fitur dirilis
+                selection_data = selected_row.get("selection", {}) if hasattr(selected_row, "get") else getattr(selected_row, "selection", {})
+                rows_selected = selection_data.get("rows", []) if isinstance(selection_data, dict) else getattr(selection_data, "rows", [])
                 
-                # Update koordinat dan picu peta untuk bergeser
-                if st.session_state.selected_coordinates != (lat, lon):
-                    st.session_state.selected_coordinates = (lat, lon)
-                    st.rerun()
-            else:
+                if len(rows_selected) > 0:
+                    row_idx = rows_selected[0]
+                    lat = float(df_display.iloc[row_idx]["latitude"])
+                    lon = float(df_display.iloc[row_idx]["longitude"])
+                    
+                    # Amankan kondisi koordinat dalam session state
+                    if st.session_state.selected_coordinates != (lat, lon):
+                        st.session_state.selected_coordinates = (lat, lon)
+                        st.rerun()
+                else:
+                    if st.session_state.selected_coordinates is not None:
+                        st.session_state.selected_coordinates = None
+                        st.rerun()
+            except Exception as e:
+                # Mencegah crash jika struktur objek internal dibaca berbeda oleh peladen
+                pass
                 # Reset koordinat jika klik dilepas
                 if st.session_state.selected_coordinates is not None:
                     st.session_state.selected_coordinates = None
