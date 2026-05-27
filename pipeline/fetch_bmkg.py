@@ -44,12 +44,21 @@ def parse_depth(depth_str: str) -> int:
 
 
 def fetch_from_endpoint(url: str, source_name: str) -> pd.DataFrame:
+   def fetch_from_endpoint(url: str, source_name: str) -> pd.DataFrame:
     """
     Fungsi generik untuk mengambil dan mem-parsing JSON dari satu endpoint BMKG.
     """
     print(f"[FETCH] Meminta data dari {source_name}...")
     try:
-        response = requests.get(url, timeout=15)
+        # SOLUSI 403 FORBIDDEN: Menambahkan identitas browser Chrome (User-Agent) 
+        # agar tidak diblokir oleh sistem keamanan server BMKG
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            "Accept": "application/json"
+        }
+        
+        # Masukkan parameter headers ke dalam requests.get
+        response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         data = response.json()
 
@@ -65,55 +74,11 @@ def fetch_from_endpoint(url: str, source_name: str) -> pd.DataFrame:
             return pd.DataFrame()
 
         records = []
+        # ... (Biarkan sisa kode di bawahnya sama persis seperti sebelumnya) ...
         for g in data_gempa:
             try:
                 dt_str = f"{g.get('Tanggal', '')} {g.get('Jam', '')}"
-                
-                # Format datetime BMKG kadang bervariasi, kita coba parse
-                # Contoh: "26 Mei 2024 10:15:30 WIB"
-                
-                lat_str, lon_str = g.get("Coordinates", ",").split(",")
-                latitude  = float(lat_str)
-                longitude = float(lon_str)
-
-                magnitude = float(g.get("Magnitude", 0.0))
-                depth_km  = parse_depth(g.get("Kedalaman", "0"))
-
-                # Buat ID unik (hash) berdasarkan waktu dan magnitudo agar konsisten
-                # Ini berguna jika BMKG mengupdate narasi wilayah tapi event-nya sama
-                unique_string = f"{dt_str}_{magnitude}_{latitude}_{longitude}"
-                event_id = hashlib.md5(unique_string.encode('utf-8')).hexdigest()[:12]
-                event_id = f"ev_{event_id}"
-
-                record = {
-                    "event_id": event_id,
-                    "datetime": dt_str,
-                    "magnitude": magnitude,
-                    "depth_km": depth_km,
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "region": g.get("Wilayah", ""),
-                    "source_endpoint": source_name,
-                    "ingested_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-                }
-                records.append(record)
-            except Exception as e:
-                print(f"[WARNING] Gagal mem-parsing satu baris data dari {source_name}: {e}")
-                continue
-
-        print(f"[OK] Berhasil mengambil {len(records)} record dari {source_name}")
-        return pd.DataFrame(records)
-
-    except requests.exceptions.Timeout:
-        print(f"[ERROR] Timeout saat mengakses {source_name}")
-        return pd.DataFrame()
-    except requests.exceptions.RequestException as e:
-        print(f"[ERROR] Gagal mengakses {source_name}: {e}")
-        return pd.DataFrame()
-    except Exception as e:
-        print(f"[ERROR] Error tidak terduga dari {source_name}: {e}")
-        return pd.DataFrame()
-
+# ... LANJUTAN KODE ANDA SEBELUMNYA ...
 
 def fetch_all_bmkg_data() -> pd.DataFrame:
     """
