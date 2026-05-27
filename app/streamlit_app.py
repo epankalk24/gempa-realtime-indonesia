@@ -35,102 +35,97 @@ try:
         st.markdown("###")
         
         # 5. Logika Interaktivitas Klik Tabel -> Peta
-        # Membuat penampung variabel koordinat terpilih di dalam session state Streamlit
         if "selected_coordinates" not in st.session_state:
             st.session_state.selected_coordinates = None
 
-        # 6. TATA LETAK VERTIKAL: PETA DI ATAS (LEBAR PENUH)
+        # 6. TATA LETAK 1: PETA DI ATAS (LEBAR PENUH)
         render_map(filtered_df, selected_coords=st.session_state.selected_coordinates)
         st.markdown("---")
         
-        # 7. BAGIAN BAWAH: TABEL INTERAKTIF & GRAFIK (SIDE-BY-SIDE)
-        bottom_left, bottom_right = st.columns([1, 1])
+        # 7. TATA LETAK 2: TABEL DI TENGAH (LEBAR PENUH)
+        st.markdown("### 📋 Tabel Riwayat Aktivitas Seismik")
+        st.caption("💡 *Klik baris pada tabel di bawah ini untuk mengunci dan menggeser peta langsung ke pusat gempa.*")
         
-        with bottom_left:
-            st.markdown("### 📋 Tabel Riwayat Aktivitas Seismik")
-            st.caption("💡 *Klik baris pada tabel di bawah ini untuk mengunci dan menggeser peta langsung ke pusat gempa.*")
+        display_cols = ["datetime", "magnitude", "depth_km", "region", "latitude", "longitude"]
+        df_display = filtered_df[display_cols].copy()
+        df_display["datetime"] = df_display["datetime"].dt.strftime('%Y-%m-%d %H:%M:%S')
+        
+        selected_row = st.dataframe(
+            df_display.rename(columns={
+                "datetime": "Waktu Kejadian (UTC)",
+                "magnitude": "Magnitudo (SR)",
+                "depth_km": "Kedalaman (Km)",
+                "region": "Lokasi Wilayah",
+                "latitude": "Lintang",
+                "longitude": "Bujur"
+            }),
+            use_container_width=True,
+            height=400,
+            on_select="rerun",
+            selection_mode="single-row"
+        )
+        
+        # Ekstraksi indeks baris secara defensif
+        try:
+            selection_data = selected_row.get("selection", {}) if hasattr(selected_row, "get") else getattr(selected_row, "selection", {})
+            rows_selected = selection_data.get("rows", []) if isinstance(selection_data, dict) else getattr(selection_data, "rows", [])
             
-            display_cols = ["datetime", "magnitude", "depth_km", "region", "latitude", "longitude"]
-            df_display = filtered_df[display_cols].copy()
-            df_display["datetime"] = df_display["datetime"].dt.strftime('%Y-%m-%d %H:%M:%S')
-            
-            # Eksekusi tabel interaktif versi Streamlit 1.35.0+
-            selected_row = st.dataframe(
-                df_display.rename(columns={
-                    "datetime": "Waktu Kejadian (UTC)",
-                    "magnitude": "Magnitudo (SR)",
-                    "depth_km": "Kedalaman (Km)",
-                    "region": "Lokasi Wilayah",
-                    "latitude": "Lintang",
-                    "longitude": "Bujur"
-                }),
-                use_container_width=True,
-                height=400,
-                on_select="rerun",
-                selection_mode="single-row"
-            )
-            
-            # KUNCI PERBAIKAN LOGIKA: Ekstraksi indeks baris secara defensif
-            try:
-                selection_data = selected_row.get("selection", {}) if hasattr(selected_row, "get") else getattr(selected_row, "selection", {})
-                rows_selected = selection_data.get("rows", []) if isinstance(selection_data, dict) else getattr(selection_data, "rows", [])
+            if len(rows_selected) > 0:
+                row_idx = rows_selected[0]
+                lat = float(df_display.iloc[row_idx]["latitude"])
+                lon = float(df_display.iloc[row_idx]["longitude"])
                 
-                if len(rows_selected) > 0:
-                    row_idx = rows_selected[0]
-                    lat = float(df_display.iloc[row_idx]["latitude"])
-                    lon = float(df_display.iloc[row_idx]["longitude"])
-                    
-                    # Update koordinat dan picu peta untuk bergeser
-                    if st.session_state.selected_coordinates != (lat, lon):
-                        st.session_state.selected_coordinates = (lat, lon)
-                        st.rerun()
-                else:
-                    # Reset koordinat jika klik dilepas
-                    if st.session_state.selected_coordinates is not None:
-                        st.session_state.selected_coordinates = None
-                        st.rerun()
-            except Exception as e:
-                # Mencegah crash jika struktur objek internal dibaca berbeda
-                pass
+                # Update koordinat dan picu peta untuk bergeser
+                if st.session_state.selected_coordinates != (lat, lon):
+                    st.session_state.selected_coordinates = (lat, lon)
+                    st.rerun()
+            else:
+                # Reset koordinat jika klik dilepas
+                if st.session_state.selected_coordinates is not None:
+                    st.session_state.selected_coordinates = None
+                    st.rerun()
+        except Exception as e:
+            pass
 
-        with bottom_right:
-            st.markdown("### 📊 Analisis Grafis Seismik")
-            
-            # Membuat dua tab grafik agar tampilan ringkas dan rapi
-            tab1, tab2 = st.tabs(["📈 Tren Harian", "🧪 Korelasi Kedalaman"])
-            
-            with tab1:
-                if not filtered_df.empty:
-                    # Menghitung frekuensi gempa per tanggal kejadian
-                    filtered_df["tanggal"] = filtered_df["datetime"].dt.date
-                    trend_df = filtered_df.groupby("tanggal").size().reset_index(name="Jumlah Kejadian")
-                    
-                    fig_trend = px.bar(
-                        trend_df, x="tanggal", y="Jumlah Kejadian",
-                        labels={"tanggal": "Tanggal Kejadian", "Jumlah Kejadian": "Frekuensi Gempa"},
-                        color_discrete_sequence=["#1B6B71"]
-                    )
-                    fig_trend.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=320)
-                    st.plotly_chart(fig_trend, use_container_width=True)
-                else:
-                    st.info("Tidak ada data untuk grafik tren.")
-                    
-            with tab2:
-                if not filtered_df.empty:
-                    # Membuat Scatter plot korelasi antara magnitudo dengan kedalaman pusat gempa
-                    fig_scatter = px.scatter(
-                        filtered_df, x="magnitude", y="depth_km",
-                        color="magnitude",
-                        labels={"magnitude": "Magnitudo (SR)", "depth_km": "Kedalaman (Km)"},
-                        color_continuous_scale=["#2E7D32", "#F57C00", "#D32F2F"],
-                        hover_name="region"
-                    )
-                    fig_scatter.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=320)
-                    # Membalik sumbu Y agar kedalaman semakin ke bawah semakin besar angkanya
-                 fig_scatter.update_yaxes(autorange="reversed")
-                    st.plotly_chart(fig_scatter, use_container_width=True)
-                else:
-                    st.info("Tidak ada data untuk grafik korelasi.")
-                    
+        st.markdown("---")
+
+        # 8. TATA LETAK 3: GRAFIK DI BAWAH (LEBAR PENUH)
+        st.markdown("### 📊 Analisis Grafis Seismik")
+        
+        # Grafik sekarang akan menggunakan ruang layar secara penuh (full width)
+        tab1, tab2 = st.tabs(["📈 Tren Harian", "🧪 Korelasi Kedalaman"])
+        
+        with tab1:
+            if not filtered_df.empty:
+                filtered_df["tanggal"] = filtered_df["datetime"].dt.date
+                trend_df = filtered_df.groupby("tanggal").size().reset_index(name="Jumlah Kejadian")
+                
+                fig_trend = px.bar(
+                    trend_df, x="tanggal", y="Jumlah Kejadian",
+                    labels={"tanggal": "Tanggal Kejadian", "Jumlah Kejadian": "Frekuensi Gempa"},
+                    color_discrete_sequence=["#1B6B71"]
+                )
+                # Tinggi grafik ditambahkan menjadi 400 agar lebih mudah dianalisis
+                fig_trend.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=400)
+                st.plotly_chart(fig_trend, use_container_width=True)
+            else:
+                st.info("Tidak ada data untuk grafik tren.")
+                
+        with tab2:
+            if not filtered_df.empty:
+                fig_scatter = px.scatter(
+                    filtered_df, x="magnitude", y="depth_km",
+                    color="magnitude",
+                    labels={"magnitude": "Magnitudo (SR)", "depth_km": "Kedalaman (Km)"},
+                    color_continuous_scale=["#2E7D32", "#F57C00", "#D32F2F"],
+                    hover_name="region"
+                )
+                fig_scatter.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=400)
+                # PERBAIKAN: Menggunakan argumen 'reversed' sesuai standar dokumentasi Plotly
+                fig_scatter.update_yaxes(autorange="reversed")
+                st.plotly_chart(fig_scatter, use_container_width=True)
+            else:
+                st.info("Tidak ada data untuk grafik korelasi.")
+                
 except Exception as e:
     st.error(f"Sistem gagal menginisialisasi antarmuka web app: {e}")
