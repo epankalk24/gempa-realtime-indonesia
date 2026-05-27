@@ -4,41 +4,48 @@ from folium.plugins import MarkerCluster
 from streamlit_folium import st_folium
 import pandas as pd
 
-def render_map(df: pd.DataFrame):
+def get_marker_color(magnitude: float) -> str:
+    """Menentukan warna berdasarkan kekuatan magnitudo gempa (Intuitive Hazard Color)."""
+    if magnitude < 4.0:
+        return "#2E7D32"  # Hijau (Kecil)
+    elif magnitude < 5.5:
+        return "#F57C00"  # Oren (Menengah)
+    else:
+        return "#D32F2F"  # Merah (Tinggi)
+
+def render_map(df: pd.DataFrame, selected_coords=None):
     """
-    Merender peta spasial interaktif menggunakan Folium dengan klasterisasi titik.
+    Merender peta spasial interaktif dengan ukuran penuh.
+    Jika selected_coords (lat, lon) dikirim dari tabel, peta akan otomatis berpusat di titik tersebut.
     """
-    st.subheader("🗺️ Peta Distribusi Episentrum Gempa")
+    st.markdown("### 🗺️ Peta Distribusi Episentrum Gempa")
     
-    # Koordinat pusat awal peta terkunci di tengah kepulauan Indonesia
-    indonesia_center = [-2.5, 118.0]
-    
-    # Inisialisasi peta dasar dengan tema CartoDB Positron (Minimalis & Elegan)
-    m = folium.Map(location=indonesia_center, zoom_start=5, tiles="CartoDB positron", prefer_canvas=True)
-    
-    # Mengaktifkan fungsi Marker Cluster agar titik tidak bertumpuk berantakan
+    # Logika penentuan pusat peta (Center Lokasi)
+    if selected_coords:
+        map_center = selected_coords
+        zoom_level = 8  # Zoom-in langsung ke lokasi gempa yang diklik
+    else:
+        map_center = [-2.5, 118.0]  # Pusat default Indonesia
+        zoom_level = 5
+
+    # Inisialisasi peta dengan lebar penuh (Full-Width)
+    m = folium.Map(location=map_center, zoom_start=zoom_level, tiles="CartoDB positron", prefer_canvas=True)
     marker_cluster = MarkerCluster().add_to(m)
 
     if df.empty:
-        st.info("Tidak ada data koordinat yang memenuhi kriteria filter untuk ditampilkan di peta.")
-        # Tetap tampilkan peta kosong Indonesia
-        st_folium(m, width=700, height=450, returned_objects=[])
+        st.info("Tidak ada data koordinat yang memenuhi kriteria filter.")
+        st_folium(m, width="100%", height=500, returned_objects=[])
         return
 
-    # Loop membaca baris data spasial untuk plotting
     for _, row in df.iterrows():
-        # Aturan Warna Konsep Minimalis: < 5.0 Terracotta, >= 5.0 Deep Teal
         mag = row["magnitude"]
-        color_code = "#C4533E" if mag < 5.0 else "#1B6B71"
-        
-        # Formula ukuran radius lingkaran proporsional terhadap magnitudo
-        radius_size = mag * 3
+        color_code = get_marker_color(mag)
+        radius_size = max(mag * 3.5, 10)  # Memastikan lingkaran terkecil tetap terlihat jelas
 
-        # Penyusunan jendela pop-up informasi yang rapi saat titik diklik
         popup_html = f"""
-        <div style="font-family: Arial, sans-serif; font-size: 12px; width: 200px;">
+        <div style="font-family: Arial, sans-serif; font-size: 12px; width: 220px;">
             <h4 style="margin: 0 0 5px 0; color: {color_code};">Gempa {mag} SR</h4>
-            <b>Waktu:</b> {row['datetime'].strftime('%Y-%m-%d %H:%M:%S')}<br>
+            <b>Waktu (UTC):</b> {row['datetime'].strftime('%Y-%m-%d %H:%M:%S')}<br>
             <b>Kedalaman:</b> {row['depth_km']} Km<br>
             <b>Lokasi:</b> {row['region']}
         </div>
@@ -55,5 +62,13 @@ def render_map(df: pd.DataFrame):
             weight=1.5
         ).add_to(marker_cluster)
 
-    # Tampilkan komponen peta spasial ke halaman web Streamlit
-    st_folium(m, width=700, height=450, returned_objects=[])
+    # Tambahkan penanda khusus berwarna biru jika pengguna memilih gempa dari tabel
+    if selected_coords:
+        folium.Marker(
+            location=selected_coords,
+            icon=folium.Icon(color="blue", icon="info-sign"),
+            tooltip="Lokasi Gempa yang Anda Pilih"
+        ).add_to(m)
+
+    # Render peta dengan width="100%" agar memenuhi layar
+    st_folium(m, width="100%", height=500, key=f"map_{selected_coords}", returned_objects=[])
