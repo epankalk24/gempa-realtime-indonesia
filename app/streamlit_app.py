@@ -43,10 +43,10 @@ try:
         render_map(filtered_df, selected_coords=st.session_state.selected_coordinates)
         st.markdown("---")
         
-        # 7. BAGIAN BAWAH: TABEL INTERAKTIF & GRAFIK (SIDE-BY-SIDE DI BAWAH PETA)
+        # 7. BAGIAN BAWAH: TABEL INTERAKTIF & GRAFIK (SIDE-BY-SIDE)
         bottom_left, bottom_right = st.columns([1, 1])
         
-       with bottom_left:
+        with bottom_left:
             st.markdown("### 📋 Tabel Riwayat Aktivitas Seismik")
             st.caption("💡 *Klik baris pada tabel di bawah ini untuk mengunci dan menggeser peta langsung ke pusat gempa.*")
             
@@ -70,9 +70,8 @@ try:
                 selection_mode="single_row"
             )
             
-            # KUNCI PERBAIKAN LOGIKA: Ekstraksi indeks baris secara defensif untuk Streamlit v1.35.0
+            # KUNCI PERBAIKAN LOGIKA: Ekstraksi indeks baris secara defensif
             try:
-                # Pola pembacaan indeks baris terpilih pada versi awal fitur dirilis
                 selection_data = selected_row.get("selection", {}) if hasattr(selected_row, "get") else getattr(selected_row, "selection", {})
                 rows_selected = selection_data.get("rows", []) if isinstance(selection_data, dict) else getattr(selection_data, "rows", [])
                 
@@ -81,21 +80,18 @@ try:
                     lat = float(df_display.iloc[row_idx]["latitude"])
                     lon = float(df_display.iloc[row_idx]["longitude"])
                     
-                    # Amankan kondisi koordinat dalam session state
+                    # Update koordinat dan picu peta untuk bergeser
                     if st.session_state.selected_coordinates != (lat, lon):
                         st.session_state.selected_coordinates = (lat, lon)
                         st.rerun()
                 else:
+                    # Reset koordinat jika klik dilepas
                     if st.session_state.selected_coordinates is not None:
                         st.session_state.selected_coordinates = None
                         st.rerun()
             except Exception as e:
-                # Mencegah crash jika struktur objek internal dibaca berbeda oleh peladen
+                # Mencegah crash jika struktur objek internal dibaca berbeda
                 pass
-                # Reset koordinat jika klik dilepas
-                if st.session_state.selected_coordinates is not None:
-                    st.session_state.selected_coordinates = None
-                    st.rerun()
 
         with bottom_right:
             st.markdown("### 📊 Analisis Grafis Seismik")
