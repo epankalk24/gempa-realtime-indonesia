@@ -127,7 +127,7 @@ try:
                     )
                     fig_scatter.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=320)
                     # Membalik sumbu Y agar kedalaman semakin ke bawah semakin besar angkanya
-                    fig_scatter.update_yaxes(autorange="reverse")
+                 fig_scatter.update_yaxes(autorange="reversed")
                     st.plotly_chart(fig_scatter, use_container_width=True)
                 else:
                     st.info("Tidak ada data untuk grafik korelasi.")
