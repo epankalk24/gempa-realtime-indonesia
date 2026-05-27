@@ -1,0 +1,43 @@
+name: Fetch BMKG Earthquake Data
+
+on:
+  push:
+    branches: [ main, master ]   # Alur kerja langsung berjalan otomatis setiap kali Anda menyimpan file
+  schedule:
+    - cron: '0 * * * *'          # Sistem akan tetap berjalan otomatis setiap jam tepat (Waktu UTC)
+  workflow_dispatch:             # Menampilkan tombol manual "Run workflow" di antarmuka GitHub
+
+jobs:
+  fetch-and-store:
+    runs-on: ubuntu-latest       # Menggunakan server Linux virtual gratis yang disediakan oleh GitHub
+
+    steps:
+      # Langkah 1: Mengunduh kode terbaru dari repositori epankalk24 ke server virtual
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Langkah 2: Memasang lingkungan bahasa pemrograman Python versi 3.11
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      # Langkah 3: Memasang semua pustaka library pendukung yang terdaftar di requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Langkah 4: Membaca kunci rahasia Google dari GitHub Secrets dan mengubahnya menjadi file credentials.json
+      - name: Write Google credentials from secret
+        run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > credentials.json
+
+      # Langkah 5: Mengeksekusi skrip pemrograman utama untuk penarikan data BMKG ke Google Sheets
+      - name: Run BMKG data pipeline
+        env:
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+        run: python main.py
+
+      # Langkah 6: Menghapus file credentials.json dari server virtual demi alasan keamanan data
+      - name: Remove credentials file
+        if: always()
+        run: rm -f credentials.json
