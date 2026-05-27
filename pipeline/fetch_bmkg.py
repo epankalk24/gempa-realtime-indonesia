@@ -1,7 +1,7 @@
 """
 fetch_bmkg.py
 -------------
-Mengambil data gempa dari dua endpoint API resmi BMKG TEWS (Tsunami Early Warning System).
+Mengambil data gempa dari TIGA endpoint API resmi BMKG TEWS (Tsunami Early Warning System).
 Script ini hanya bertanggung jawab untuk MENGAMBIL dan MERAPIKAN data mentah menjadi
 DataFrame pandas — logika filter dan deduplication ditangani di preprocess.py.
 """
@@ -12,8 +12,9 @@ from datetime import datetime, timezone
 import hashlib
 
 
-# Dua endpoint resmi BMKG yang akan kita gunakan
+# Tiga endpoint resmi BMKG (termasuk autogempa untuk kecepatan real-time instan)
 BMKG_ENDPOINTS = {
+    "bmkg_tews_autogempa": "https://data.bmkg.go.id/DataMKG/TEWS/autogempa.json",
     "bmkg_tews_m5":        "https://data.bmkg.go.id/DataMKG/TEWS/gempaterkini.json",
     "bmkg_tews_dirasakan": "https://data.bmkg.go.id/DataMKG/TEWS/gempadirasakan.json",
 }
@@ -37,73 +38,67 @@ def parse_coordinate(coord_str: str) -> float:
 
 def parse_depth(depth_str: str) -> int:
     """
-    Mengubah string kedalaman BMKG menjadi integer kilometer.
-    Contoh: "10 km" -> 10
+    Mengubah string kedalaman BMKG ('10 km') menjadi integer (10).
     """
-    return int(str(depth_str).replace(" km", "").replace("km", "").strip())
-
-
-def generate_event_id(datetime_str: str, magnitude: float, lat: float, lon: float) -> str:
-    """
-    Membuat ID unik untuk setiap kejadian gempa.
-    
-    Mengapa perlu ID buatan? Karena BMKG TEWS API tidak menyediakan ID per kejadian
-    secara konsisten. Kita buat ID dengan meng-hash kombinasi waktu + magnitudo + koordinat
-    — kombinasi ini secara praktis unik untuk setiap gempa.
-    """
-    key = f"{datetime_str}_{magnitude}_{lat}_{lon}"
-    short_hash = hashlib.md5(key.encode()).hexdigest()[:12]
-    return f"ev_{short_hash}"
+    return int(''.join(filter(str.isdigit, str(depth_str))))
 
 
 def fetch_from_endpoint(url: str, source_name: str) -> pd.DataFrame:
     """
-    Mengambil dan mem-parsing data dari satu endpoint BMKG.
-    Mengembalikan DataFrame kosong jika terjadi error apapun
-    (pipeline tidak akan crash jika satu endpoint gagal).
+    Fungsi generik untuk mengambil dan mem-parsing JSON dari satu endpoint BMKG.
     """
+    print(f"[FETCH] Meminta data dari {source_name}...")
     try:
         response = requests.get(url, timeout=15)
         response.raise_for_status()
         data = response.json()
 
-        # Struktur JSON BMKG: { "Infogempa": { "gempa": [...] } }
-        gempa_list = data.get("Infogempa", {}).get("gempa", [])
-        if not gempa_list:
-            print(f"[WARNING] Tidak ada data dari endpoint: {source_name}")
+        # Ekstraksi array gempa
+        data_gempa = data.get("Infogempa", {}).get("gempa", [])
+        
+        # BMKG API mengembalikan dict tunggal (autogempa) jika hanya ada 1 gempa
+        if isinstance(data_gempa, dict):
+            data_gempa = [data_gempa]
+
+        if not data_gempa:
+            print(f"[WARNING] Tidak ada data gempa ditemukan di {source_name}")
             return pd.DataFrame()
 
-        # Kadang BMKG mengembalikan satu object dict alih-alih list — normalisasi dulu
-        if isinstance(gempa_list, dict):
-            gempa_list = [gempa_list]
-
         records = []
-        ingested_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-
-        for g in gempa_list:
+        for g in data_gempa:
             try:
-                datetime_str = g.get("DateTime", "")
-                magnitude    = float(g.get("Magnitude", 0))
-                latitude     = parse_coordinate(g.get("Lintang", "0"))
-                longitude    = parse_coordinate(g.get("Bujur", "0"))
-                depth_km     = parse_depth(g.get("Kedalaman", "0 km"))
-                region       = g.get("Wilayah", "")
-                event_id     = generate_event_id(datetime_str, magnitude, latitude, longitude)
+                dt_str = f"{g.get('Tanggal', '')} {g.get('Jam', '')}"
+                
+                # Format datetime BMKG kadang bervariasi, kita coba parse
+                # Contoh: "26 Mei 2024 10:15:30 WIB"
+                
+                lat_str, lon_str = g.get("Coordinates", ",").split(",")
+                latitude  = float(lat_str)
+                longitude = float(lon_str)
 
-                records.append({
-                    "event_id":        event_id,
-                    "datetime":        datetime_str,
-                    "magnitude":       magnitude,
-                    "depth_km":        depth_km,
-                    "latitude":        latitude,
-                    "longitude":       longitude,
-                    "region":          region,
+                magnitude = float(g.get("Magnitude", 0.0))
+                depth_km  = parse_depth(g.get("Kedalaman", "0"))
+
+                # Buat ID unik (hash) berdasarkan waktu dan magnitudo agar konsisten
+                # Ini berguna jika BMKG mengupdate narasi wilayah tapi event-nya sama
+                unique_string = f"{dt_str}_{magnitude}_{latitude}_{longitude}"
+                event_id = hashlib.md5(unique_string.encode('utf-8')).hexdigest()[:12]
+                event_id = f"ev_{event_id}"
+
+                record = {
+                    "event_id": event_id,
+                    "datetime": dt_str,
+                    "magnitude": magnitude,
+                    "depth_km": depth_km,
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "region": g.get("Wilayah", ""),
                     "source_endpoint": source_name,
-                    "ingested_at":     ingested_at,
-                })
+                    "ingested_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                }
+                records.append(record)
             except Exception as e:
-                # Lewati satu record bermasalah tanpa menghentikan seluruh proses
-                print(f"[WARNING] Gagal parse satu record dari {source_name}: {e}")
+                print(f"[WARNING] Gagal mem-parsing satu baris data dari {source_name}: {e}")
                 continue
 
         print(f"[OK] Berhasil mengambil {len(records)} record dari {source_name}")
@@ -122,8 +117,8 @@ def fetch_from_endpoint(url: str, source_name: str) -> pd.DataFrame:
 
 def fetch_all_bmkg_data() -> pd.DataFrame:
     """
-    Mengambil data dari SEMUA endpoint BMKG dan menggabungkannya.
-    Event yang sama mungkin muncul di kedua endpoint — deduplikasi awal dilakukan di sini
+    Mengambil data dari KETIGA endpoint BMKG dan menggabungkannya.
+    Event yang sama mungkin muncul di beberapa endpoint — deduplikasi awal dilakukan di sini
     berdasarkan event_id, deduplication final (vs data yang sudah ada di Sheets)
     dilakukan di preprocess.py.
     """
@@ -138,7 +133,10 @@ def fetch_all_bmkg_data() -> pd.DataFrame:
         return pd.DataFrame()
 
     combined = pd.concat(all_data, ignore_index=True)
-    # Hapus duplikat antar endpoint (event yang sama bisa muncul di keduanya)
-    combined = combined.drop_duplicates(subset=["event_id"])
-    print(f"[OK] Total {len(combined)} record unik setelah menggabungkan semua endpoint")
+    
+    # KUNCI: Hapus duplikat antar endpoint (autogempa hampir pasti ada juga di gempaterkini)
+    # Ini memastikan database kita tetap bersih
+    combined = combined.drop_duplicates(subset=["event_id"], keep="first")
+    
+    print(f"[OK] Total {len(combined)} record unik berhasil digabungkan dari semua endpoint.")
     return combined
