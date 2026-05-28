@@ -1,46 +1,75 @@
 import streamlit as st
 import pandas as pd
-from gspread_dataframe import get_as_dataframe
 import gspread
 from google.oauth2.service_account import Credentials
 import json
 
-def load_data():
-    """
-    Membaca data dari Google Sheets tab 'filtered_data' menggunakan kredensial dari Streamlit Secrets.
-    Data disimpan dalam cache selama 5 menit (300 detik) untuk menghemat kuota API.
-    """
-    @st.cache_data(ttl=300)
-    def fetch_cached_data():
-        # Mengambil kredensial rahasia dari sistem manajemen Streamlit Cloud
-        creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"])
-        spreadsheet_id = st.secrets["SPREADSHEET_ID"]
-        
-        scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-        client = gspread.authorize(creds)
-        
-        # Membuka sheet filtered_data
-        sh = client.open_by_key(spreadsheet_id)
-        worksheet = sh.worksheet("filtered_data")
-        
-        # Konversi data spreadsheet menjadi Pandas DataFrame
-        df = pd.DataFrame(worksheet.get_all_records())
-        
-        if not df.empty:
-            # Konversi secara defensif, data yang gagal di-parse akan diubah menjadi NaT
-            df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce")
-            
-            # Buang baris data yang format waktunya rusak agar peta tidak crash
-            df = df.dropna(subset=["datetime"])
-            
-            # Mengurutkan dari kejadian yang paling terbaru
-            df = df.sort_values(by="datetime", ascending=False)
-            
-        return df
+def get_gspread_client():
+    """Fungsi internal untuk inisialisasi koneksi ke Google API."""
+    creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"])
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    return gspread.authorize(creds)
 
-    return fetch_cached_data()
+def normalize_dataframe(df: pd.DataFrame, is_archive: bool = False) -> pd.DataFrame:
+    """Membersihkan baris kosong, konversi datetime, dan mengurutkan data."""
+    if df is None or df.empty:
+        return pd.DataFrame()
+    
+    # Hapus baris yang seluruhnya kosong (artefak Google Sheets)
+    df = df.dropna(how='all')
+    
+    if not df.empty and not is_archive:
+        if 'datetime' in df.columns:
+            # Konversi string ISO ke objek datetime Pandas
+            df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
+        
+        # Buang baris data yang format waktunya rusak agar peta tidak crash
+        df = df.dropna(subset=['datetime'])
+        
+        # Mengurutkan dari kejadian paling terbaru
+        df = df.sort_values(by="datetime", ascending=False)
+        
+    return df
+
+@st.cache_data(ttl=300)
+def load_filtered_data() -> pd.DataFrame:
+    """Memuat data operasional (30 hari terakhir). Cache 5 menit."""
+    try:
+        client = get_gspread_client()
+        sh = client.open_by_key(st.secrets["SPREADSHEET_ID"])
+        worksheet = sh.worksheet("filtered_data")
+        df = pd.DataFrame(worksheet.get_all_records())
+        return normalize_dataframe(df)
+    except Exception as e:
+        st.error(f"Gagal memuat data operasional (filtered_data): {e}")
+        return pd.DataFrame()
+
+@st.cache_data(ttl=3600)
+def load_raw_data() -> pd.DataFrame:
+    """Memuat seluruh data mentah. Cache 1 jam."""
+    try:
+        client = get_gspread_client()
+        sh = client.open_by_key(st.secrets["SPREADSHEET_ID"])
+        worksheet = sh.worksheet("raw_data")
+        df = pd.DataFrame(worksheet.get_all_records())
+        return normalize_dataframe(df)
+    except Exception as e:
+        st.error(f"Gagal memuat data mentah (raw_data): {e}")
+        return pd.DataFrame()
+
+@st.cache_data(ttl=86400)
+def load_archive_summary() -> pd.DataFrame:
+    """Memuat agregasi tren historis bulanan. Cache 24 jam."""
+    try:
+        client = get_gspread_client()
+        sh = client.open_by_key(st.secrets["SPREADSHEET_ID"])
+        worksheet = sh.worksheet("archive_summary")
+        df = pd.DataFrame(worksheet.get_all_records())
+        return normalize_dataframe(df, is_archive=True)
+    except Exception:
+        # Mengembalikan DataFrame kosong diam-diam jika tab archive belum memiliki data
+        return pd.DataFrame()
