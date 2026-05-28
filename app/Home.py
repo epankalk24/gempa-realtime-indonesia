@@ -3,15 +3,12 @@ from datetime import timedelta
 import pandas as pd
 
 from utils.sheets_connector import load_filtered_data
+from utils.i18n import translations  # <--- BARIS INI WAJIB ADA
 from components.metric_cards import render_metric_cards
 from components.filters import render_filters
 from components.map_view import render_map
-from utils.i18n import translations  # <--- BARIS INI WAJIB ADA
-st.set_page_config(
-    page_title="Pantau Gempa Indonesia",
-    page_icon="🌏",
-    layout="wide"
-)
+
+st.set_page_config(page_title="Pantau Gempa Indonesia", page_icon="🌏", layout="wide")
 
 st.title("🌏 Pantau Gempa Indonesia")
 st.markdown("""
