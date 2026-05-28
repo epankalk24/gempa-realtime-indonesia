@@ -1,10 +1,18 @@
+"""
+streamlit_app.py
+----------------
+Dasbor operasional utama. Hanya memuat data 30 hari terakhir (Hot Storage).
+Difokuskan pada metrik instan, filter spasial, dan peta interaktif folium.
+"""
+
 import streamlit as st
+from datetime import timedelta
 import pandas as pd
-import plotly.express as px
-from utils.sheets_connector import load_data
+
+from utils.sheets_connector import load_filtered_data
 from components.metric_cards import render_metric_cards
 from components.filters      import render_filters
-from components.map_view     import render_map, get_marker_color
+from components.map_view     import render_map
 
 # 1. Konfigurasi Properti Browser Tab
 st.set_page_config(
@@ -13,119 +21,48 @@ st.set_page_config(
     layout="wide"
 )
 
-# 2. Perbaikan Narasi Sesuai Permintaan (Clean Data Copywriting)
-st.title("🌏 Sistem Pemantauan Gempa Bumi Real-Time Indonesia")
+st.title("🌏 Dasbor Pemantauan Gempa Bumi Real-Time")
 st.markdown("""
-**Sumber:** Data Terbuka BMKG  
-*Data kejadian gempabumi yang terjadi di seluruh wilayah Indonesia. Terdapat 3 jenis data kejadian gempabumi, 
-yaitu Gempabumi M 5.0+, Gempabumi Dirasakan, dan Gempabumi Berpotensi Tsunami.*
+**Sumber:** Data Terbuka BMKG (Terintegrasi secara otomatis)  
+*Dasbor ini menampilkan aktivitas seismik mutakhir di seluruh wilayah Indonesia. 
+Data operasional diperbarui secara berkala melalui pipeline serverless.*
 """)
 st.markdown("---")
 
-try:
-    with st.spinner("Sinkronisasi data sedang berlangsung dari peladen Google Sheets..."):
-        raw_df = load_data()
-        
-    if not raw_df.empty:
-        # 3. Render Panel Filter di Sidebar
-        filtered_df = render_filters(raw_df)
-        
-        # 4. Render Kartu Statistik Utama
-        render_metric_cards(filtered_df)
-        st.markdown("###")
-        
-        # 5. Logika Interaktivitas Klik Tabel -> Peta
-        if "selected_coordinates" not in st.session_state:
-            st.session_state.selected_coordinates = None
+# 2. Pemuatan Data Operasional Laten Rendah
+with st.spinner("Sinkronisasi pangkalan data operasional..."):
+    raw_df = load_filtered_data()
 
-        # 6. TATA LETAK 1: PETA DI ATAS (LEBAR PENUH)
-        render_map(filtered_df, selected_coords=st.session_state.selected_coordinates)
-        st.markdown("---")
-        
-        # 7. TATA LETAK 2: TABEL DI TENGAH (LEBAR PENUH)
-        st.markdown("### 📋 Tabel Riwayat Aktivitas Seismik")
-        st.caption("💡 *Klik baris pada tabel di bawah ini untuk mengunci dan menggeser peta langsung ke pusat gempa.*")
-        
-        display_cols = ["datetime", "magnitude", "depth_km", "region", "latitude", "longitude"]
-        df_display = filtered_df[display_cols].copy()
-        df_display["datetime"] = df_display["datetime"].dt.strftime('%Y-%m-%d %H:%M:%S')
-        
-        selected_row = st.dataframe(
-            df_display.rename(columns={
-                "datetime": "Waktu Kejadian (UTC)",
-                "magnitude": "Magnitudo (SR)",
-                "depth_km": "Kedalaman (Km)",
-                "region": "Lokasi Wilayah",
-                "latitude": "Lintang",
-                "longitude": "Bujur"
-            }),
-            use_container_width=True,
-            height=400,
-            on_select="rerun",
-            selection_mode="single-row"
-        )
-        
-        # Ekstraksi indeks baris secara defensif
-        try:
-            selection_data = selected_row.get("selection", {}) if hasattr(selected_row, "get") else getattr(selected_row, "selection", {})
-            rows_selected = selection_data.get("rows", []) if isinstance(selection_data, dict) else getattr(selection_data, "rows", [])
-            
-            if len(rows_selected) > 0:
-                row_idx = rows_selected[0]
-                lat = float(df_display.iloc[row_idx]["latitude"])
-                lon = float(df_display.iloc[row_idx]["longitude"])
-                
-                # Update koordinat dan picu peta untuk bergeser
-                if st.session_state.selected_coordinates != (lat, lon):
-                    st.session_state.selected_coordinates = (lat, lon)
-                    st.rerun()
-            else:
-                # Reset koordinat jika klik dilepas
-                if st.session_state.selected_coordinates is not None:
-                    st.session_state.selected_coordinates = None
-                    st.rerun()
-        except Exception as e:
-            pass
+if raw_df.empty:
+    st.warning("Menunggu masuknya data dari API BMKG. Silakan muat ulang halaman beberapa saat lagi.")
+    st.stop()
 
-        st.markdown("---")
+# 3. Eksekusi Modul Antarmuka
+filtered_df = render_filters(raw_df)
+render_metric_cards(filtered_df)
 
-        # 8. TATA LETAK 3: GRAFIK DI BAWAH (LEBAR PENUH)
-        st.markdown("### 📊 Analisis Grafis Seismik")
-        
-        # Grafik sekarang akan menggunakan ruang layar secara penuh (full width)
-        tab1, tab2 = st.tabs(["📈 Tren Harian", "🧪 Korelasi Kedalaman"])
-        
-        with tab1:
-            if not filtered_df.empty:
-                filtered_df["tanggal"] = filtered_df["datetime"].dt.date
-                trend_df = filtered_df.groupby("tanggal").size().reset_index(name="Jumlah Kejadian")
-                
-                fig_trend = px.bar(
-                    trend_df, x="tanggal", y="Jumlah Kejadian",
-                    labels={"tanggal": "Tanggal Kejadian", "Jumlah Kejadian": "Frekuensi Gempa"},
-                    color_discrete_sequence=["#1B6B71"]
-                )
-                # Tinggi grafik ditambahkan menjadi 400 agar lebih mudah dianalisis
-                fig_trend.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=400)
-                st.plotly_chart(fig_trend, use_container_width=True)
-            else:
-                st.info("Tidak ada data untuk grafik tren.")
-                
-        with tab2:
-            if not filtered_df.empty:
-                fig_scatter = px.scatter(
-                    filtered_df, x="magnitude", y="depth_km",
-                    color="magnitude",
-                    labels={"magnitude": "Magnitudo (SR)", "depth_km": "Kedalaman (Km)"},
-                    color_continuous_scale=["#2E7D32", "#F57C00", "#D32F2F"],
-                    hover_name="region"
-                )
-                fig_scatter.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=400)
-                # PERBAIKAN: Menggunakan argumen 'reversed' sesuai standar dokumentasi Plotly
-                fig_scatter.update_yaxes(autorange="reversed")
-                st.plotly_chart(fig_scatter, use_container_width=True)
-            else:
-                st.info("Tidak ada data untuk grafik korelasi.")
-                
-except Exception as e:
-    st.error(f"Sistem gagal menginisialisasi antarmuka web app: {e}")
+st.markdown("###")
+
+# 4. Render Peta Spasial
+# Logika interaktivitas klik tabel dinonaktifkan di halaman utama untuk menjaga kecepatan render
+render_map(filtered_df)
+
+# 5. Tabel Ringkas Aktivitas Seismik (7 Hari Terakhir)
+st.markdown("---")
+st.subheader("📋 Log Aktivitas Seismik (7 Hari Terakhir)")
+
+batas_waktu_7_hari = raw_df['datetime'].max() - timedelta(days=7)
+df_7_hari = filtered_df[filtered_df['datetime'] >= batas_waktu_7_hari]
+
+# Membersihkan tampilan tabel dari ID sistem agar scannable
+st.dataframe(
+    df_7_hari,
+    column_config={
+        "event_id": None, 
+        "ingested_at": None,
+        "potensi": st.column_config.TextColumn("Potensi Tsunami"),
+        "dirasakan": st.column_config.TextColumn("Skala Dirasakan")
+    },
+    use_container_width=True,
+    hide_index=True
+)
