@@ -1,58 +1,55 @@
 import streamlit as st
 import pandas as pd
+from utils.i18n import translations # Import kamus
 
-def render_filters(df: pd.DataFrame):
-    """
-    Menampilkan filter interaktif di bilah samping (sidebar) dan mengembalikan DataFrame yang tersaring.
-    """
-    st.sidebar.header("🎛️ Panel Penyaringan Data")
+# Tambahkan argumen 'lang' dengan nilai default 'id'
+def render_filters(df: pd.DataFrame, lang: str = 'id'):
+    t = translations[lang] # Ekstrak kamus sesuai bahasa
+    
+    st.sidebar.header(t["filter_title"])
     
     if df.empty:
         return df
 
-    # Filter 1: Slider Skala Magnitudo
     min_mag_val = float(df["magnitude"].min())
     max_mag_val = float(df["magnitude"].max())
-    
     if min_mag_val == max_mag_val:
         min_mag_val = 0.0
         
     selected_mag = st.sidebar.slider(
-        "Pilih Rentang Magnitudo (M):",
+        t["filter_mag"], # Gunakan variabel kamus
         min_value=0.0,
         max_value=10.0,
         value=(min_mag_val, max_mag_val),
         step=0.1
     )
 
-    # Filter 2: Slider Kedalaman Gempa
     max_depth = int(df["depth_km"].max()) if not df["depth_km"].empty else 700
     selected_depth = st.sidebar.slider(
-        "Pilih Kedalaman Maksimum (Km):",
+        t["filter_depth"],
         min_value=0,
         max_value=max_depth if max_depth > 0 else 700,
         value=max_depth
     )
 
-    # Filter 3: Dropdown Kategori Sumber Data
-    categories = ["Semua Kategori", "Gempa Dirasakan / Berpotensi Tsunami"]
-    selected_cat = st.sidebar.selectbox("Kategori Klasifikasi Gempa:", categories)
+    categories = [t["cat_all"], t["cat_felt"]]
+    selected_cat = st.sidebar.selectbox(t["filter_cat"], categories)
 
-    # Proses Logika Penyaringan Dasar
     mask = (df["magnitude"] >= selected_mag[0]) & \
            (df["magnitude"] <= selected_mag[1]) & \
            (df["depth_km"] <= selected_depth)
            
     filtered_df = df[mask]
 
-    # Proses Logika Tambahan Berdasarkan Dropdown Kategori
-    if selected_cat == "Gempa Dirasakan / Berpotensi Tsunami":
+    if selected_cat == t["cat_felt"]:
         kondisi_dirasakan = (df["dirasakan"] != "-") if "dirasakan" in df.columns else False
         kondisi_potensi = (df["potensi"].str.contains("Tsunami", case=False, na=False)) if "potensi" in df.columns else False
-        
         filtered_df = filtered_df[kondisi_dirasakan | kondisi_potensi]
 
     st.sidebar.markdown("---")
-    st.sidebar.caption(f"Menampilkan **{len(filtered_df)}** dari {len(df)} kejadian.")
+    
+    # Penanganan teks dinamis
+    caption_text = f"Menampilkan **{len(filtered_df)}** dari {len(df)} kejadian." if lang == 'id' else f"Showing **{len(filtered_df)}** of {len(df)} events."
+    st.sidebar.caption(caption_text)
     
     return filtered_df
