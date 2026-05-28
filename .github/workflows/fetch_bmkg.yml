@@ -7,11 +7,8 @@ name: Fetch BMKG Earthquake Data
 
 on:
   schedule:
-    # Sintaks cron: menit jam hari bulan hari_minggu
-    # "0 * * * *" = menit ke-0 setiap jam = setiap jam tepat dalam UTC
-    # Catatan: UTC+7 (WIB) = jam 07.00 WIB berjalan pada jam 00.00 UTC
-    - cron: '0 * * * *'
-  workflow_dispatch:  # Aktifkan tombol "Run workflow" manual di GitHub UI
+    - cron: '1 0,3,6,9,12,15,18,21 * * *'  # menit :01 UTC = jeda dari GAS
+  workflow_dispatch:
 
 jobs:
   fetch-and-store:
@@ -54,3 +51,15 @@ jobs:
       - name: Remove credentials file
         if: always()
         run: rm -f credentials.json
+- name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[PIPELINE FAILURE] ${new Date().toISOString()}`,
+              body: `Run ID: ${context.runId}\nLog: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              labels: ['bug']
+            })
