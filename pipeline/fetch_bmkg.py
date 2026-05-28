@@ -13,7 +13,6 @@ import hashlib
 
 # Tiga endpoint resmi BMKG (termasuk autogempa untuk kecepatan real-time instan)
 BMKG_ENDPOINTS = {
-    "bmkg_tews_autogempa": "https://data.bmkg.go.id/DataMKG/TEWS/autogempa.json",
     "bmkg_tews_m5":        "https://data.bmkg.go.id/DataMKG/TEWS/gempaterkini.json",
     "bmkg_tews_dirasakan": "https://data.bmkg.go.id/DataMKG/TEWS/gempadirasakan.json",
 }
