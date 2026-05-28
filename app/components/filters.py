@@ -17,8 +17,8 @@ def render_filters(df: pd.DataFrame):
     if min_mag_val == max_mag_val:
         min_mag_val = 0.0
         
-selected_mag = st.sidebar.slider(
-        "Pilih Rentang Magnitudo (M):", # Diubah ke M
+    selected_mag = st.sidebar.slider(
+        "Pilih Rentang Magnitudo (M):",
         min_value=0.0,
         max_value=10.0,
         value=(min_mag_val, max_mag_val),
@@ -47,11 +47,10 @@ selected_mag = st.sidebar.slider(
 
     # Proses Logika Tambahan Berdasarkan Dropdown Kategori
     if selected_cat == "Gempa Dirasakan / Berpotensi Tsunami":
-        # Menyaring data jika dirasakan BUKAN "-" ATAU potensinya mengandung kata Tsunami
-        filtered_df = filtered_df[
-            (filtered_df["dirasakan"] != "-") | 
-            (filtered_df["potensi"].str.contains("Tsunami", case=False, na=False))
-        ]
+        kondisi_dirasakan = (df["dirasakan"] != "-") if "dirasakan" in df.columns else False
+        kondisi_potensi = (df["potensi"].str.contains("Tsunami", case=False, na=False)) if "potensi" in df.columns else False
+        
+        filtered_df = filtered_df[kondisi_dirasakan | kondisi_potensi]
 
     st.sidebar.markdown("---")
     st.sidebar.caption(f"Menampilkan **{len(filtered_df)}** dari {len(df)} kejadian.")
