@@ -23,10 +23,9 @@ with st.spinner("Sinkronisasi pangkalan data..."):
 if raw_df.empty:
     st.warning("Menunggu masuknya data dari API BMKG. Silakan muat ulang halaman beberapa saat lagi.")
     st.stop()
-
-filtered_df = render_filters(raw_df)
-render_metric_cards(filtered_df)
-
+# 3. Lempar parameter bahasa ke dalam komponen (Hanya ada SATU pemanggilan)
+filtered_df = render_filters(raw_df, lang=st.session_state.lang)
+render_metric_cards(filtered_df, lang=st.session_state.lang)
 st.markdown("###")
 render_map(filtered_df)
 
