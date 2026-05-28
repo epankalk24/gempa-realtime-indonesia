@@ -1,31 +1,21 @@
-"""
-1_Riwayat_Lengkap.py
---------------------
-Halaman dedikasi untuk penelusuran tabular dan pengunduhan dataset murni.
-Memiliki opsi pemanggilan 'Cold Storage' (raw_data).
-"""
-
 import streamlit as st
 import pandas as pd
 from utils.sheets_connector import load_filtered_data, load_raw_data
 
-st.set_page_config(page_title="Riwayat Lengkap Seismik", page_icon="📚", layout="wide")
+st.set_page_config(page_title="Riwayat Gempa", page_icon="📚", layout="wide")
 
-st.title("📚 Eksplorasi Riwayat Data Seismik")
-st.markdown("Gunakan panel ini untuk menelusuri atau mengunduh dataset aktivitas gempa bumi secara spesifik.")
+st.title("📚 Cari & Unduh Data Gempa")
+st.markdown("Cari gempa berdasarkan tanggal atau rentang waktu, lalu unduh datanya")
 
-# 1. Kontrol Seleksi Basis Data
 col_kontrol, col_ruang = st.columns([1, 2])
 with col_kontrol:
     sumber_data = st.radio(
-        "Pilih Sumber Basis Data:",
-        options=["30 Hari Terakhir (Operasional)", "Seluruh Riwayat (Data Mentah)"],
-        help="Data 30 hari memuat lebih cepat. Seluruh riwayat akan menarik puluhan ribu baris data dari arsip."
+        "Tampilkan data dari:",
+        options=["30 Hari Terakhir", "Semua Riwayat"]
     )
 
-# 2. Pemuatan Data Berdasarkan Pilihan
 with st.spinner('Menghubungkan ke pangkalan data...'):
-    if sumber_data == "30 Hari Terakhir (Operasional)":
+    if sumber_data == "30 Hari Terakhir":
         df = load_filtered_data()
     else:
         df = load_raw_data()
@@ -34,19 +24,20 @@ if df.empty:
     st.warning("Data belum tersedia di pangkalan data ini.")
     st.stop()
 
-# 3. Mekanisme Penyaringan Berbasis Tanggal
 df['tanggal_murni'] = df['datetime'].dt.date
 st.markdown("---")
-st.subheader("Filter Spesifik Rentang Waktu")
+st.subheader("Pilih Rentang Tanggal")
 
 tanggal_min = df['tanggal_murni'].min()
 tanggal_max = df['tanggal_murni'].max()
 
+# label_visibility="collapsed" menyembunyikan label bawaan agar tidak redundan
 rentang_tanggal = st.date_input(
-    "Tentukan Rentang Tanggal",
+    "Rentang Tanggal",
     value=(tanggal_min, tanggal_max),
     min_value=tanggal_min,
-    max_value=tanggal_max
+    max_value=tanggal_max,
+    label_visibility="collapsed" 
 )
 
 if len(rentang_tanggal) == 2:
@@ -55,9 +46,8 @@ if len(rentang_tanggal) == 2:
 else:
     df_tampil = df
 
-st.metric("Total Kejadian Ditemukan", f"{len(df_tampil)} Gempa")
+st.metric("Ditemukan", f"{len(df_tampil)} Gempa")
 
-# 4. Rendering Tabel & Ekspor CSV
 st.dataframe(
     df_tampil.drop(columns=['tanggal_murni']), 
     column_config={"event_id": None},
