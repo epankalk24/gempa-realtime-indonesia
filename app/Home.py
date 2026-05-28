@@ -4,8 +4,8 @@ import pandas as pd
 
 from utils.sheets_connector import load_filtered_data
 from components.metric_cards import render_metric_cards
-from components.filters      import render_filters
-from components.map_view     import render_map
+from components.filters import render_filters
+from components.map_view import render_map
 
 st.set_page_config(
     page_title="Pantau Gempa Indonesia",
