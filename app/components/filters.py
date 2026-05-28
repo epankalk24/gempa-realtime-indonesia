@@ -17,8 +17,8 @@ def render_filters(df: pd.DataFrame):
     if min_mag_val == max_mag_val:
         min_mag_val = 0.0
         
-    selected_mag = st.sidebar.slider(
-        "Pilih Rentang Magnitudo (SR):",
+selected_mag = st.sidebar.slider(
+        "Pilih Rentang Magnitudo (M):", # Diubah ke M
         min_value=0.0,
         max_value=10.0,
         value=(min_mag_val, max_mag_val),
