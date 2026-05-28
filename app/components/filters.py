@@ -10,11 +10,10 @@ def render_filters(df: pd.DataFrame):
     if df.empty:
         return df
 
-    # Filter 1: Slider Skala Magnitudo (Batas bawah minimum dan maksimum otomatis dari data)
+    # Filter 1: Slider Skala Magnitudo
     min_mag_val = float(df["magnitude"].min())
     max_mag_val = float(df["magnitude"].max())
     
-    # Validasi jika nilai min dan max sama untuk menghindari crash sistem
     if min_mag_val == max_mag_val:
         min_mag_val = 0.0
         
@@ -26,7 +25,7 @@ def render_filters(df: pd.DataFrame):
         step=0.1
     )
 
-    # Filter 2: Slider Kedalaman Gempa (Dalam satuan Kilometer)
+    # Filter 2: Slider Kedalaman Gempa
     max_depth = int(df["depth_km"].max()) if not df["depth_km"].empty else 700
     selected_depth = st.sidebar.slider(
         "Pilih Kedalaman Maksimum (Km):",
@@ -36,19 +35,25 @@ def render_filters(df: pd.DataFrame):
     )
 
     # Filter 3: Dropdown Kategori Sumber Data
-    categories = ["Semua Kategori", "Gempa M 5.0+", "Gempa Dirasakan / Berpotensi Tsunami"]
+    categories = ["Semua Kategori", "Gempa Dirasakan / Berpotensi Tsunami"]
     selected_cat = st.sidebar.selectbox("Kategori Klasifikasi Gempa:", categories)
 
-    # Proses Logika Penyaringan Data Berdasarkan Pilihan Komponen UI
-    filtered_df = df[
-        (df["magnitude"] >= selected_mag[0]) & 
-        (df["magnitude"] <= selected_mag[1]) &
-        (df["depth_km"] <= selected_depth)
-    ]
+    # Proses Logika Penyaringan Dasar
+    mask = (df["magnitude"] >= selected_mag[0]) & \
+           (df["magnitude"] <= selected_mag[1]) & \
+           (df["depth_km"] <= selected_depth)
+           
+    filtered_df = df[mask]
 
-    if selected_cat == "Gempa M 5.0+":
-        filtered_df = filtered_df[filtered_df["source_endpoint"].isin(["bmkg_tews_m5", "bmkg_tews_autogempa"])]
-    elif selected_cat == "Gempa Dirasakan / Berpotensi Tsunami":
-        filtered_df = filtered_df[filtered_df["source_endpoint"] == "bmkg_tews_dirasakan"]
+    # Proses Logika Tambahan Berdasarkan Dropdown Kategori
+    if selected_cat == "Gempa Dirasakan / Berpotensi Tsunami":
+        # Menyaring data jika dirasakan BUKAN "-" ATAU potensinya mengandung kata Tsunami
+        filtered_df = filtered_df[
+            (filtered_df["dirasakan"] != "-") | 
+            (filtered_df["potensi"].str.contains("Tsunami", case=False, na=False))
+        ]
 
+    st.sidebar.markdown("---")
+    st.sidebar.caption(f"Menampilkan **{len(filtered_df)}** dari {len(df)} kejadian.")
+    
     return filtered_df
